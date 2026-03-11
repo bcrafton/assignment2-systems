@@ -1,0 +1,46 @@
+
+import os
+import json
+import time 
+
+from cs336_basics.model import *
+from cs336_basics.optimizer import *
+from cs336_basics.nn_utils import *
+
+################################
+
+batch_size = 4
+vocab_size = 50257
+context_length = 64
+d_model = 512
+num_layers = 8
+num_heads = 8
+d_ff = 512
+rope_theta = 10000
+
+m = BasicsTransformerLM(
+vocab_size=vocab_size,
+context_length=context_length,
+d_model=d_model,
+num_layers=num_layers,
+num_heads=num_heads,
+d_ff=d_ff,
+rope_theta=rope_theta,
+)
+
+optimizer = AdamW(m.parameters(), lr=1e-4)
+
+################################
+
+for _ in range(10):
+  x = torch.randint(low=0, high=vocab_size, size=(batch_size, context_length))
+  y = torch.randint(low=0, high=vocab_size, size=(batch_size, context_length))
+  p = m(x)
+  loss = cross_entropy(p, y)
+  loss = loss.backward()
+  optimizer.step()
+
+################################
+
+
+

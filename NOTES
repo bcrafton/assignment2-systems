@@ -1,0 +1,29 @@
+
+uv run python train.py
+> the problem with using uv, is it uses a virtual env to match the course. but we need a more up to date version of pytorch.
+
+nsys profile python3 benchmarking_script.py
+> launched nsight through search on ubuntu, then just open the file that ^^ this command dumps.
+> look at CUDA HW row.
+
+https://docs.pytorch.org/memory_viz
+> can this app be run locally? and not as webpage?
+
+==========
+
+# simply calling compile can give 50% better performance.
+m.compile()
+
+==========
+
+warning we got:
+/home/brian/Documents/torch/lib/python3.10/site-packages/torch/_inductor/compile_fx.py:321: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+
+==========
+
+Problem (benchmarking_script): 4 points
+Problem (nsys_profile): 5 points
+Problem (mixed_precision_accumulation): 1 point
+Problem (benchmarking_mixed_precision): 2 points
+Problem (memory_profiling): 4 points
+
