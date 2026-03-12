@@ -27,3 +27,47 @@ Problem (mixed_precision_accumulation): 1 point
 Problem (benchmarking_mixed_precision): 2 points
 Problem (memory_profiling): 4 points
 
+==========
+
+nsys profile python3 benchmarking_script.py
+nsys profile python3 benchmarking_script.py --pytorch --python-backtrace=cuda
+
+lets just actually do all the assignment questions instead of debating what to actually do.
+
+nsys profile python3 nsys_profile.py
+nsys profile python3 nsys_profile.py --pytorch
+nsys profile python3 nsys_profile.py --pytorch --python-backtrace=cuda
+
+so we can see the 15 samples (5 warmup, 10 actual)
+and then we can see the 12 layers inside each sample
+if you look under CUDA API (instead of CUDA HW) you can see the 15 cudaSynchonize() calls.
+yeah but it dosnt have useful annotations, and I dont think its synchronous.
+but I am not sure how to actually get a nice breakdown inside the profile.
+also the names inside the profile are impossible to understand what is what, I guess we need to name them somehow?
+
+yeah so listen to the pdf:
+"Hint: look at the “CUDA GPU Kernel Summary” under “Stats Systems View”, and filter using NVTX ranges to identify which parts of the model are responsible for which kernels"
+
+you filter by selecting a range of the waveform and right clicking and saying "zoom and filter"
+then stats system view will automatically re-populate.
+
+okay so the reason we were stuggling is because we wernt actually using the NVTX range annotations.
+then use NVTX Range Summary instead of CUDA GPU Kernel Summary
+we were assigning: scaled_dot_product_attention = annotated_scaled_dot_product_attention
+in nsys_profile.py, but not in model.py
+
+look at the NVTX in CUDA HW, not in CUDA API.
+you can easily line up the kernels with our annotations.
+
+runtimes look totally different when we dont do: m.compile()
+
+its clear that softmax takes up a lot of time for the number of flops we need to do.
+
+cannot figure out how to annotate the backwards pass. i think it should be fine.
+
+==========
+
+
+
+
+

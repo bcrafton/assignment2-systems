@@ -3,6 +3,7 @@ import os
 import json
 import time
 import timeit
+import numpy as np
 
 from cs336_basics.model import *
 from cs336_basics.optimizer import *
@@ -16,25 +17,26 @@ import torch
 # torch.backends.cuda.matmul.allow_tf32 = True
 # torch.backends.cudnn.allow_tf32 = True
 
+# scaled_dot_product_attention = annotated_scaled_dot_product_attention
+
 ################################
 
-batch_size = 1
-vocab_size = 50257
-context_length = 64
-d_model = 768
-num_layers = 12
-num_heads = 12
-d_ff = 3072
-rope_theta = 10000
+small = {'batch_size': 1, 'vocab_size': 50257, 'context_length': 64, 'd_model': 768,  'num_layers': 12, 'num_heads': 12, 'd_ff': 3072,  'rope_theta': 10000}
+med   = {'batch_size': 1, 'vocab_size': 50257, 'context_length': 64, 'd_model': 1024, 'num_layers': 24, 'num_heads': 16, 'd_ff': 4096,  'rope_theta': 10000}
+large = {'batch_size': 1, 'vocab_size': 50257, 'context_length': 64, 'd_model': 1280, 'num_layers': 36, 'num_heads': 20, 'd_ff': 5120,  'rope_theta': 10000}
+xl    = {'batch_size': 1, 'vocab_size': 50257, 'context_length': 64, 'd_model': 1600, 'num_layers': 48, 'num_heads': 25, 'd_ff': 6400,  'rope_theta': 10000}
+_27B  = {'batch_size': 1, 'vocab_size': 50257, 'context_length': 64, 'd_model': 2560, 'num_layers': 32, 'num_heads': 32, 'd_ff': 10240, 'rope_theta': 10000}
+
+config = small
 
 m = BasicsTransformerLM(
-vocab_size=vocab_size,
-context_length=context_length,
-d_model=d_model,
-num_layers=num_layers,
-num_heads=num_heads,
-d_ff=d_ff,
-rope_theta=rope_theta,
+vocab_size=config['vocab_size'],
+context_length=config['context_length'],
+d_model=config['d_model'],
+num_layers=config['num_layers'],
+num_heads=config['num_heads'],
+d_ff=config['d_ff'],
+rope_theta=config['rope_theta'],
 ).to('cuda')
 
 # simply calling compile can give 50% better performance.
@@ -45,37 +47,57 @@ optimizer = AdamW(m.parameters(), lr=1e-4)
 ################################
 
 def fake_train(N):
+  inf = []
+  grad = []
+  update = []
+
   for _ in range(N):
-    x = torch.randint(low=0, high=vocab_size, size=(batch_size, context_length)).to('cuda')
-    y = torch.randint(low=0, high=vocab_size, size=(batch_size, context_length)).to('cuda')
+    x = torch.randint(low=0, high=config['vocab_size'], size=(config['batch_size'], config['context_length'])).to('cuda')
+    y = torch.randint(low=0, high=config['vocab_size'], size=(config['batch_size'], config['context_length'])).to('cuda')
+    
+    T1 = time.time()
     p = m(x)
+    T2 = time.time()
     loss = cross_entropy(p, y)
     loss = loss.backward()
+    T3 = time.time()
     optimizer.step()
+    T4 = time.time()
+
+    inf.append( T2 - T1 )
+    grad.append( T3 - T2 )
+    update.append( T4 - T3 )
+
     torch.cuda.synchronize()
+
+  return inf, grad, update
 
 ################################
 
 # warmup
-fake_train(10)
+# inf, grad, update = fake_train(5)
 
-# start timer, memory history
-start = time.time()
-torch.cuda.memory._record_memory_history(max_entries=1000000)
-
-# run 10 steps
-fake_train(1)
-
-# end timer, dump memory history
-print (time.time() - start)
-torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
+# run 1 steps
+inf, grad, update = fake_train(10)
+print ('inf', np.mean(inf), np.std(inf))
+print ('grad', np.mean(grad), np.std(grad))
+print ('update', np.mean(update), np.std(update))
 
 ################################
+
 '''
-with torch.autocast(device_type="cuda", dtype=torch.float16):
-  x = torch.randint(low=0, high=vocab_size, size=(batch_size, context_length)).to('cuda')
-  p = m(x)
-  print (p.dtype)
+b)
+inf 0.005195903778076172 3.44152573579595e-05
+grad 0.005629181861877441 5.240874775765193e-05
+update 0.015578889846801757 0.00013407352574959681
+
+std is low.
+
+c)
+inf 0.22316055297851561 0.6535703970065881
+grad 0.022184872627258302 0.0477221362080594
+update 0.016055917739868163 0.004404501205468649
 '''
+
 ################################
 

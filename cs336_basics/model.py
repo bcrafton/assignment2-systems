@@ -13,11 +13,11 @@ import torch.nn as nn
 from torch import Tensor
 from jaxtyping import Float, Bool, Int
 
-
 from .nn_utils import softmax
 
-logger = logging.getLogger(__name__)
+import torch.cuda.nvtx as nvtx
 
+logger = logging.getLogger(__name__)
 
 class Linear(nn.Module):
     def __init__(self, d_in: int, d_out: int):
@@ -54,6 +54,7 @@ class Embedding(nn.Module):
         )
     
     def forward(self, token_ids: Int[Tensor, " ..."]) -> Float[Tensor, " ... d_model"]:
+      with nvtx.range("embedding"):
         return self.weight[token_ids, :]
     
     def extra_repr(self):
@@ -376,13 +377,24 @@ class TransformerBlock(nn.Module):
         """
         # NOTE: this is a pre-norm Transformer, and differs from the original
         # description in the paper.
+
         # Apply the multi-head self-attention sublayer
-        x_attn = self.attn(self.ln1(x))
+        with nvtx.range("ln1"):
+          ln1 = self.ln1(x)
+
+        x_attn = self.attn(ln1)
+
         attn_sublayer_output = x + x_attn
 
         # Apply the feed-forward sublayer
-        x_ffn = self.ffn(self.ln2(attn_sublayer_output))
+        with nvtx.range("ln2"):
+          ln2 = self.ln2(attn_sublayer_output)
+
+        with nvtx.range("swiglu"):
+          x_ffn = self.ffn(ln2)
+
         ffn_sublayer_output = attn_sublayer_output + x_ffn
+
         return ffn_sublayer_output
 
 
@@ -395,7 +407,6 @@ class SwiGLU(nn.Module):
 
     def forward(self, x):
         return self.w2(silu(self.w1(x)) * self.w3(x))
-
 
 def scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
@@ -421,16 +432,19 @@ def scaled_dot_product_attention(
         implementation with the provided key, query, and value tensors.
     """
 
-    d_k = K.shape[-1]
-    attention_scores = einsum(Q, K, "... query d_k, ... key d_k -> ... query key") / math.sqrt(d_k)
+    with nvtx.range("scaled dot product attention : attention scores"):
+      d_k = K.shape[-1]
+      attention_scores = einsum(Q, K, "... query d_k, ... key d_k -> ... query key") / math.sqrt(d_k)
+      if mask is not None:
+          attention_scores = torch.where(mask, attention_scores, float("-inf"))
 
-    if mask is not None:
-        attention_scores = torch.where(mask, attention_scores, float("-inf"))
+    with nvtx.range("scaled dot product attention : softmax"):
+      attention_weights = softmax(attention_scores, dim=-1)  # Softmax over the key dimension
 
-    attention_weights = softmax(attention_scores, dim=-1)  # Softmax over the key dimension
+    with nvtx.range("scaled dot product attention : final matmul"):
+      out_proj = einsum(attention_weights, V, "... query key, ... key d_v ->  ... query d_v")
 
-    return einsum(attention_weights, V, "... query key, ... key d_v ->  ... query d_v")
-
+    return out_proj
 
 class CausalMultiHeadSelfAttention(nn.Module):
     """Multi-Head Self-Attention
@@ -487,9 +501,10 @@ class CausalMultiHeadSelfAttention(nn.Module):
         *b, sequence_length, d_model = x.size()
         assert d_model == self.d_model
 
-        Q = self.q_proj(x)
-        K = self.k_proj(x)
-        V = self.v_proj(x)
+        with nvtx.range("QKV"):
+          Q = self.q_proj(x)
+          K = self.k_proj(x)
+          V = self.v_proj(x)
 
         # Take apart each head from the embedding dimension of Q, K, V to shape (..., num_heads, seq_len, d_k).
         Q, K, V = (
@@ -503,8 +518,9 @@ class CausalMultiHeadSelfAttention(nn.Module):
         # Duplicate token positions for each head
         token_positions = rearrange(token_positions, "... seq -> ... 1 seq")
 
-        Q = self.positional_encoder(Q, token_positions)
-        K = self.positional_encoder(K, token_positions)
+        with nvtx.range("RoPE"):
+          Q = self.positional_encoder(Q, token_positions)
+          K = self.positional_encoder(K, token_positions)
 
         # Construct causal mask
         seq = torch.arange(sequence_length, device=x.device)
@@ -520,7 +536,9 @@ class CausalMultiHeadSelfAttention(nn.Module):
         attn_output = rearrange(attn_output, "batch heads seq d_v -> batch seq (heads d_v)").contiguous()
 
         # Apply the output projection
-        output = self.output_proj(attn_output)
+        with nvtx.range("output proj"):
+          output = self.output_proj(attn_output)
+
         return output
 
 def silu(x: torch.Tensor):
