@@ -67,6 +67,61 @@ cannot figure out how to annotate the backwards pass. i think it should be fine.
 
 ==========
 
+okay we been at home for 1 week now. time to lock in and finish up this course and write the paper outline. and learn whatever else you want.
+
+==========
+
+cant seem to understand this memory profile
+how come the allocations ramp up like this? only forward pass ...
+it should go up and down based on what part of attention layer we are in
+OH, its because of the residual layers, isnt it? yeah we commented out the residual part and it stopped growing so fast.
+
+without grad or opt = 800MB
+with grad = 1.7GB
+with grad and opt = 3.3GB
+
+with grad and opt (FP16) = 3.3GB
+
+==========
+
+Problem (pytorch_attention): 2 points
+
+(d) Time 100 forward passes through attention using the inputs.
+(e) Measure how much memory is in use before the backward pass starts, and time 100 backward
+passes.
+
+> so what I dont understand here, is are we actually running 100 forward passes, keeping their logits and then computing 100 backwards passes?
+  > that will have so much memory in use, right?
+
+==========
+
+kinda cool they have tutorial on mxfp4
+https://triton-lang.org/main/getting-started/tutorials/10-block-scaled-matmul.html
+
+==========
+
+so we still cannot seem to make the grad_fn come up:
+> should be: tensor([ 90.8563, -93.6815, -80.8884, ..., 103.4840, -21.4634, -24.0192], device='cuda:0', grad_fn=<WeightedSumFuncBackward>)
+> we get: tensor([ -0.0386, -12.9419,  -7.4737,  ..., -18.5993,   5.2991,  23.6717], device='cuda:0')
+
+we can print y.grad_fn and we get 'None'
+eh maybe its not important, we can find the other tutorials as reference.
+
+==========
+
+i do think we get caught up too much in details. who cares if grad_fn isnt showing up? better use of time is studying the actual code.
+
+studying flash attention really drives home the idea that good research is just about reasonable solutions to real industry problems.
+its not about crazy shit clearly leading no-where.
+
+==========
+
+wow after all that reading and delaying, we are just going to implement flash attention using pytorch lol.
+
+==========
+
+run pytest -k test_flash_forward_pass_pytorch
+pytest tests/test_attention.py::test_flash_forward_pass_pytorch
 
 
 
