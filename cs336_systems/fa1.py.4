@@ -50,14 +50,9 @@ class FlashAttention(torch.autograd.Function):
 
     # (1) Initialize outputs O & L
     S = torch.zeros((b_q, seq_q, seq_k))
-    L = torch.zeros((b_q, seq_q))
-    O = torch.zeros((b_v, seq_v, d_v))
 
     # (2) Compute attention over blocks
     for i in range(num_block_q):
-      _Mij = torch.zeros((b_q, block_q))
-      _Lij = torch.zeros((b_q, block_q))
-      _Oij = torch.zeros((b_q, block_q, d_q))
       for j in range(num_block_k):
         Qi = Q[:, i*block_q : (i+1)*block_q, :]
         Kj = K[:, j*block_k : (j+1)*block_k, :]
@@ -65,24 +60,11 @@ class FlashAttention(torch.autograd.Function):
         Sij = einsum(Qi, Kj, "... seq_q d, ... seq_k d -> ... seq_q seq_k") / math.sqrt(d_k)
         S[:, i*block_q : (i+1)*block_q, j*block_k : (j+1)*block_k] = Sij
 
-        Mij = torch.maximum( _Mij, torch.amax(Sij, axis=-1) )
-        Pij = torch.exp(Sij - Mij.unsqueeze(-1))
-        # the paper does say this operation is "pointwise":
-        Lij = torch.exp(_Mij - Mij) * _Lij + torch.sum(Pij, axis=-1)
+    attention_scores = S
 
-        diag = torch.diag_embed(input=torch.exp(_Mij - Mij), offset=0, dim1=-2, dim2=-1)
-        Oij = einsum(diag, _Oij, "... seq_q seq_k, ... seq_k d_v -> ... seq_q d_v") + einsum(Pij, Vj, "... seq_q seq_k, ... seq_k d_v -> ... seq_q d_v")
-
-        _Mij = Mij
-        _Lij = Lij
-        _Oij = Oij
-
-      L[:, i*block_q : (i+1)*block_q] = Mij + torch.log(Lij)
-
-      diag = torch.diag_embed(input=Lij**-1, offset=0, dim1=-2, dim2=-1)
-      Oij = einsum(diag, Oij, "... seq_q seq_q, ... seq_q d_q -> ... seq_q d_q")
-      O[:, i*block_q : (i+1)*block_q, :] = Oij
-
+    attention_weights = torch.softmax(attention_scores, dim=-1)
+    O = einsum(attention_weights, V, "... query key, ... key d_v ->  ... query d_v")
+    L = torch.logsumexp(attention_scores, dim=-1)
     ctx.save_for_backward(L)
     return O
 

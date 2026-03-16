@@ -123,6 +123,31 @@ wow after all that reading and delaying, we are just going to implement flash at
 run pytest -k test_flash_forward_pass_pytorch
 pytest tests/test_attention.py::test_flash_forward_pass_pytorch
 
+==========
+
+okay so one thing im not getting about flash attention is these blocks
+I thought it was 16x16 blocks.
+but they load 16xd_model size blocks of K and Q... is that because the product of the two blocks will be 16x16?
+
+FlashAttention V2 Explained By Google Engineer | Train LLM With Better Parallelism 
+> https://www.youtube.com/watch?v=0xLhi9fHCcE
+
+==========
+
+so we flash attention test can be passed by using the original attention layer code.
+so lets baby step through each step of flash attention by replacing the original code with it.
+that way its easier to isolate our mistake.
+
+wow so these 2 are different:
+> Sij = einsum(Qi, Kj, "... seq_q d_q, ... seq_k d_k -> ... seq_q seq_k") / math.sqrt(d_k)
+> Sij = einsum(Qi, Kj, "... seq_q d, ... seq_k d -> ... seq_q seq_k") / math.sqrt(d_k)
+
+okay we made it pass.
+but what is strange is that we arnt following the paper exactly.
+in fact, we found a difference between the algorithm in the paper and the algorithm in the assignment pdf.
+
+==========
+
 
 
 
