@@ -2,7 +2,7 @@
 import torch
 
 from cs336_systems.fa1_triton import FlashAttentionTriton
-from cs336_systems.fa1 import FlashAttention
+from cs336_systems.fa1_hack import FlashAttention
 
 #################################
 
