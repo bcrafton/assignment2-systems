@@ -5,6 +5,8 @@ import torch
 
 from einops import rearrange, einsum
 
+import numpy as np
+
 ######################
 
 def cdiv(x, y):
@@ -247,4 +249,19 @@ print (y)
 # print (dir(y))
 # print (y.grad_fn)
 
+y_ref = torch.matmul(x, w)
+
 ######################
+
+y = y.cpu().numpy()
+y_ref = y_ref.cpu().numpy()
+
+# print (y[0])
+# print (y_ref[0])
+
+assert np.all(np.isclose( y, y_ref, atol=1e-2 ))
+
+######################
+
+
+

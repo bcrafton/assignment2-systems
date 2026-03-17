@@ -148,6 +148,40 @@ in fact, we found a difference between the algorithm in the paper and the algori
 
 ==========
 
+pytest tests/test_attention.py::test_flash_forward_pass_pytorch
+pytest tests/test_attention.py::test_flash_forward_pass_triton
+
+==========
+
+feels like we are learning more at a slower pace by not having any reference help.
+(like we did for assignment 1)
+i wonder if we should revisit assignment 1 to learn things we missed?
+nah ...
+
+but would be good to understand how to generate text and kv cache.
+ah, yeah chapter 6 "generating text" goes through this.
+
+==========
+
+think we need to implement matrix multiplication in triton first.
+oh wait, we sorta already did this though.
+
+==========
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
