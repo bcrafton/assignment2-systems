@@ -86,7 +86,7 @@ def flash_fwd_kernel(
   L_ptr + batch_index * stride_lb,
   shape=(N_QUERIES,),
   strides=(stride_lq,),
-  offsets=(0,),
+  offsets=(query_tile_index * Q_TILE_SIZE,),
   block_shape=(Q_TILE_SIZE,),
   order=(0,),
   )
@@ -116,6 +116,10 @@ def flash_fwd_kernel(
   # print ('', K_TILE_SIZE)
   # print ('', D)
 
+  _Mij = tl.zeros(shape=(Q_TILE_SIZE,), dtype=tl.float32)
+  Mij = tl.zeros(shape=(Q_TILE_SIZE,), dtype=tl.float32)
+  Lij = tl.zeros(shape=(Q_TILE_SIZE,), dtype=tl.float32)
+
   for k in range(0, N_KEYS // K_TILE_SIZE):
     Qi = tl.load(Q_block_ptr, boundary_check=(0, 1), padding_option="zero")
     Kj = tl.load(K_block_ptr, boundary_check=(0, 1), padding_option="zero")
@@ -124,8 +128,24 @@ def flash_fwd_kernel(
     Sij = tl.dot(Qi, tl.trans(Kj)) * scale
     tl.store(S_block_ptr, Sij, boundary_check=(0,))
 
+    # print ('', Sij.shape)
+    # print ('', Q_TILE_SIZE)
+    Mij = tl.maximum(_Mij, tl.max(Sij, axis=-1))
+    # print ('', Mij)
+    Pij = tl.exp(Sij - Mij.reshape(Q_TILE_SIZE, 1))
+
+    Lij = tl.exp(_Mij - Mij) * Lij + tl.sum(Pij, axis=-1)
+    # tl.store(L_block_ptr, Lij, boundary_check=(0,))
+
     K_block_ptr = K_block_ptr.advance((K_TILE_SIZE, 0))
     S_block_ptr = S_block_ptr.advance((0, K_TILE_SIZE))
+    # L_block_ptr = L_block_ptr.advance((Q_TILE_SIZE,)) # I dont think we need to advance L.
+
+    _Mij = Mij
+
+  # print ('', Mij)
+  Lij = Mij + tl.log(Lij)
+  tl.store(L_block_ptr, Lij, boundary_check=(0,))
 
 class FlashAttentionTriton(torch.autograd.Function):
 
@@ -231,7 +251,7 @@ class FlashAttentionTriton(torch.autograd.Function):
       K_TILE_SIZE
     )
 
-    return S
+    return L
 
   def backward():
     raise NotImplementedError
