@@ -7,9 +7,9 @@ from cs336_systems.fa1_hack import FlashAttention
 
 #################################
 
-# Q = torch.ones(size=(4, 128, 64)).to('cuda')
-# K = torch.ones(size=(4, 128, 64)).to('cuda')
-# V = torch.ones(size=(4, 128, 64)).to('cuda')
+Q = torch.ones(size=(4, 128, 64)).to('cuda')
+K = torch.ones(size=(4, 128, 64)).to('cuda')
+V = torch.ones(size=(4, 128, 64)).to('cuda')
 
 Q = torch.normal(mean=0., std=1., size=(4, 128, 64)).to('cuda')
 K = torch.normal(mean=0., std=1., size=(4, 128, 64)).to('cuda')
@@ -35,10 +35,10 @@ for i in range(0, 64, 16):
 #################################
 
 print (O_ref.shape)
-print (O_ref[0][0:4])
+print (O_ref[0][0][0:4])
 
 print (O.shape)
-print (O[0][0:4])
+print (O[0][0][0:4])
 
 #################################
 

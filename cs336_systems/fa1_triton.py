@@ -107,18 +107,10 @@ def flash_fwd_kernel(
   order=(1, 0),
   )
 
-  # Q_TILE_SIZE, K_TILE_SIZE = Bq, Bk
-  # Does that mean Tq, Tk = N_QUERIES / Q_TILE_SIZE, N_KEYS / K_TILE_SIZE
-
-  # acc = tl.zeros((Q_TILE_SIZE, K_TILE_SIZE), dtype=tl.float32)
-
-  # print ('', N_KEYS)
-  # print ('', K_TILE_SIZE)
-  # print ('', D)
-
   _Mij = tl.zeros(shape=(Q_TILE_SIZE,), dtype=tl.float32)
   Mij = tl.zeros(shape=(Q_TILE_SIZE,), dtype=tl.float32)
   Lij = tl.zeros(shape=(Q_TILE_SIZE,), dtype=tl.float32)
+  Oij = tl.zeros(shape=(Q_TILE_SIZE,D), dtype=tl.float32)
 
   for k in range(0, N_KEYS // K_TILE_SIZE):
     Qi = tl.load(Q_block_ptr, boundary_check=(0, 1), padding_option="zero")
@@ -128,24 +120,25 @@ def flash_fwd_kernel(
     Sij = tl.dot(Qi, tl.trans(Kj)) * scale
     tl.store(S_block_ptr, Sij, boundary_check=(0,))
 
-    # print ('', Sij.shape)
-    # print ('', Q_TILE_SIZE)
     Mij = tl.maximum(_Mij, tl.max(Sij, axis=-1))
-    # print ('', Mij)
     Pij = tl.exp(Sij - Mij.reshape(Q_TILE_SIZE, 1))
-
     Lij = tl.exp(_Mij - Mij) * Lij + tl.sum(Pij, axis=-1)
-    # tl.store(L_block_ptr, Lij, boundary_check=(0,))
 
     K_block_ptr = K_block_ptr.advance((K_TILE_SIZE, 0))
+    V_block_ptr = V_block_ptr.advance((K_TILE_SIZE, 0))
     S_block_ptr = S_block_ptr.advance((0, K_TILE_SIZE))
-    # L_block_ptr = L_block_ptr.advance((Q_TILE_SIZE,)) # I dont think we need to advance L.
+
+    diag = tl.exp(_Mij - Mij).reshape(Q_TILE_SIZE, 1)
+    Oij = Oij * diag + tl.dot(Pij, Vj)
 
     _Mij = Mij
 
-  # print ('', Mij)
-  Lij = Mij + tl.log(Lij)
-  tl.store(L_block_ptr, Lij, boundary_check=(0,))
+  L = Mij + tl.log(Lij)
+  tl.store(L_block_ptr, L, boundary_check=(0,))
+
+  diag = 1. / Lij.reshape(Q_TILE_SIZE, 1)
+  Oij = Oij * diag
+  tl.store(O_block_ptr, Oij, boundary_check=(0,))
 
 class FlashAttentionTriton(torch.autograd.Function):
 
@@ -251,7 +244,8 @@ class FlashAttentionTriton(torch.autograd.Function):
       K_TILE_SIZE
     )
 
-    return L
+    ctx.save_for_backward(L)
+    return O
 
   def backward():
     raise NotImplementedError

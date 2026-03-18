@@ -84,7 +84,7 @@ class FlashAttention(torch.autograd.Function):
       O[:, i*block_q : (i+1)*block_q, :] = Oij
 
     ctx.save_for_backward(L)
-    return L
+    return O
 
   def backward():
     raise NotImplementedError
